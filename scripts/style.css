@@ -1,0 +1,114 @@
+body {
+	background-color : #F8F8FF;
+	display:none;
+}
+
+input, button {
+	margin: 2px;
+}
+
+#upload-button {
+	width: 150px;
+	margin: 20px auto;
+}
+
+#file-to-upload, .load-controls, #mandataire-hover {
+	display: none;
+}
+
+#pdf-loader {
+	text-align: center;
+	color: #999999;
+	font-size: 13px;
+	line-height: 100px;
+	height: 100px;
+}
+
+#numberX, #numberY {
+width: 50px;
+}
+
+#signature-pad {
+	margin-right: 5px;
+}
+
+.mandataire-section, .fichier-section, .save-section, #signature-pad {
+	border: 1px solid rgba(0,0,0,0.2);
+	box-sizing: border-box;
+	font-weight: bold;
+	padding: 2px;
+	-moz-border-radius: 5px;
+	-webkit-border-radius: 5px;
+}
+
+#page-loader {
+	height: 100px;
+	line-height: 100px;
+	text-align: center;
+	display: none;
+	color: #999999;
+	font-size: 13px;
+}
+
+#download-pdf {
+	/*margin: 20px auto 0 auto;*/
+}
+
+#holder {
+	height: 100%;
+    width: 100%;
+}
+
+.pdf-content-holder {
+	float: none;
+    margin: 0 auto;
+    padding: 0;
+}
+
+#mandataire-hover {
+	opacity: 0.5;
+	position: absolute;
+    background-color: #f1f1f1;
+    text-align: left;
+    border: 1px solid #d3d3d3;
+    display:inline;
+    overflow: visible;
+    min-width: 219px;
+    height: 40px;
+}
+
+.scrollers {
+    position: fixed;
+    top: 5px;
+    left: 5px;
+    bottom: 5px;
+    right: 5px;
+    padding: 5px 20px; 
+    overflow: auto;
+    overflow-y: scroll;
+    overflow-x: scroll;
+}
+
+/* Let's get this party started */
+::-webkit-scrollbar {
+    width: 20px;
+	height: 24px;
+}
+ 
+/* Track */
+::-webkit-scrollbar-track {
+    -webkit-box-shadow: inset 0 0 6px rgba(0,0,0,0.3); 
+    -webkit-border-radius: 10px;
+    border-radius: 10px;
+}
+ 
+/* Handle */
+::-webkit-scrollbar-thumb {
+    -webkit-border-radius: 16px;
+    border-radius: 10px;
+    background: rgba(255,0,0,0.8); 
+    -webkit-box-shadow: inset 0 0 6px rgba(0,0,0,0.5); 
+}
+::-webkit-scrollbar-thumb:window-inactive {
+	background: rgba(255,0,0,0.4); 
+}

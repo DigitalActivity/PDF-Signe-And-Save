@@ -1,0 +1,567 @@
+﻿<!DOCTYPE HTML>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale = 1.0, maximum-scale = 1.0, user-scalable=no">
+    <script src="scripts/jquery.min.js" type="text/javascript"></script>
+    <script src="scripts/signature_pad.min.js" type="text/javascript"></script>
+    <script src="scripts/pdf.js" type="text/javascript"></script>
+    <script src="scripts/pdf.worker.js" type="text/javascript"></script>
+    <script src="scripts/jspdf.min.js" type="text/javascript"></script>
+    <!-- Bootstrap core CSS -->
+    <link href="scripts/bootstrap4.0.0.min.css" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="scripts/style.css">
+</head>
+
+<body>
+    <div class="container">
+        <div class="scrollers">
+            <!-- Page load-controls -->
+            <div class="row load-controls">
+                <div class="col-sm-12 text-center center-block">
+                    <button id="upload-button" type="button" class="btn btn-primary">Choisir PDF</button>
+                    <button id="reload-page" type="button" class="btn btn-primary" href="#">Choisir un autre PDF</button><br>
+                    <input type="file" id="file-to-upload" accept="application/pdf, .pdf" /><br>
+                    <div id="pdf-loader">Chargement du document ...</div>
+                </div>
+            </div>
+
+            <!-- pdf meta -->
+            <div class="row pdf-meta">
+                <div class="col-lg-12 text-center center-block">
+                    <div>
+                        <button id="pdf-prev" type="button" class="btn btn-info">Précédent</button>
+                        <button id="pdf-next" type="button" class="btn btn-info">Suivant</button>
+                    </div>
+                    <div id="page-count-container">
+                        Page <span id="pdf-current-page"></span> of
+                        <span id="pdf-total-pages"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pdf content -->
+            <div class="row">
+                <div class="col-12 col-md-12 col-lg-10 text-center pdf-content-holder">
+                    <div class="pdf-content" id="holder">
+                        <canvas id="signature-pad" class="signature-pad" width="500"></canvas>
+                        <div id="mandataire-hover">
+                            <h3 id="Mandataire-text">Nom Mandataire</h3>
+                        </div>
+                    </div>
+
+                    <p id="page-loader">Chargement PDF ...<br>Page en traitement #<span id="num-page"><b>0</b></span></p>
+                </div>
+
+
+            </div>
+
+            <!-- Pdf pdf-save -->
+            <div class="row pdf-save">
+                <div class="col-12 col-sm-6  offset-sm-3 pdf-save-data text-center center-block">
+                    <div class="row mandataire-section">
+                        <div class="col-12">
+                            <span>Mandataire : </span>
+                            <span><input id="nom-mandataire" type="text" name="nom-mandataire" placeholder="Nom mandataire"></span>
+                        </div>
+
+                        <div class="col-12">
+                            <soan>position : </soan>
+                            <span>x<input type="number" id="numberX" step="5" placeholder="X"></span>
+                            <span>y<input type="number" id="numberY" step="5" placeholder="Y"></span>
+                        </div>
+
+                        <div class="col-12">
+                            <button id="apply-mandataire" type="button" class="btn btn-primary" href="#">Appliquer</button>
+                        </div>
+                    </div>
+
+                    <div class="row fichier-section">
+                        <div class="col-12  ">
+                            <span>Fichier : </span>
+                            <span>
+                                <input id="nom-fichier" type="text" name="nom-fichier" placeholder="pdfFile">
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="row save-section">
+                        <div class="col-12 col-sm-6 offset-sm-3 center-block">
+                            <button id="download-pdf" type="button" class="btn btn-success" href="#">Sauvegarder PDF</button>
+                            <button id="clear-page" type="button" class="btn btn-danger" href="#">Reset page</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+var eatPDF;
+	
+/**
+* PDF Eater
+*/
+function PDFEater() {
+    self = this;
+    var contenuPDF = [];
+    var contenuPDForiginal = [];
+    var CANVAS_CLASS = "signature-pad";
+    var CANVAS_ID = "signature-pad";
+    var CANVAS_HOLDER_ID = "holder";
+    var CANVAS_DOM = document.getElementById(CANVAS_ID);
+    var CANVAS_HOLDER_DOM = document.getElementById(CANVAS_HOLDER_ID);
+    var SAVE_PDF; // pdf de sauvegard
+    var __PDF_DOC, __CURRENT_PAGE = 0,  __TOTAL_PAGES, __PAGE_RENDERING_IN_PROGRESS = 0;
+
+
+    this.initPDF = function(pdf_url) {
+        self.PDFLoadingState();
+        PDFJS.getDocument(pdf_url).then(function (pdf_doc) {
+
+            __PDF_DOC = pdf_doc;
+            __TOTAL_PAGES = __PDF_DOC.numPages;
+            // occupy the first element of the array
+            // makes easier to navigate using contenuPDF[page_no]
+            contenuPDF.push(0);
+            contenuPDForiginal.push(0);
+
+            // Charger PDF dans la table contenuPDF avec promesse
+            chargerPDFRecursive();
+        }).catch(function (error) {
+            // If error re-show the upload button
+            self.ResetState();
+            console.log('erreur initPDF : ' + pdf_url);
+            showError(error.message);
+        });
+    } // FIN InitPDF
+
+
+    var chargerPDFRecursive = function() {
+        if (++__CURRENT_PAGE <= __TOTAL_PAGES) {
+
+            setTimeout(function() { 
+            // chargerCanvas avec promesse
+            $("#num-page").text(__CURRENT_PAGE);
+            const promise = self.chargerPDFCanvas();
+                promise.then(chargerPDFRecursive, showError);
+            }, 50);
+            
+        }
+        else if (__CURRENT_PAGE > __TOTAL_PAGES) {
+            // All PDF loaded
+            // Hide the pdf loader and show pdf container in HTML
+            self.PDFReadyState();
+            __CURRENT_PAGE = 1;
+            showPage(__CURRENT_PAGE);
+            setTimeout(function () {
+                initHoverMandaraire();
+            }, 100);
+        }
+    }; // FIN ChargerPDFRecursive
+
+
+    this.chargerPDFCanvas = function() {
+        return new Promise(function(resolve, reject) {
+            __PAGE_RENDERING_IN_PROGRESS = 1;
+
+            // Fetch the page
+            __PDF_DOC.getPage(__CURRENT_PAGE).then(function (page) {
+                // Create new canvas
+                var can = document.createElement('canvas');
+                can.className = CANVAS_CLASS;
+                can.setAttribute("id", CANVAS_ID);
+                can.setAttribute("no", __CURRENT_PAGE);
+                can.setAttribute("width", /*4961*/ 800);
+                /** Signature Pad **/
+                new SignaturePad(can, {
+                    backgroundColor: 'rgba(255, 255, 255, 0)',
+                    penColor: 'rgb(0, 0, 0)'
+                });
+
+                contenuPDForiginal.push({
+                    no: __CURRENT_PAGE,
+                    canvas: can
+                });
+
+                // Add to contenuPDF
+                contenuPDF.push({
+                    no: __CURRENT_PAGE,
+                    canvas: can
+                });
+
+                // As the canvas is of a fixed width we need to set the scale of the viewport accordingly
+                var scale_required = contenuPDF[__CURRENT_PAGE].canvas.width / page.getViewport(1).width;
+
+                // Get viewport of the page at required scale
+                var viewport = page.getViewport(scale_required);
+
+                // Set canvas height
+                contenuPDF[__CURRENT_PAGE].canvas.height = viewport.height;
+
+                var renderContext = {
+                    canvasContext: contenuPDF[__CURRENT_PAGE].canvas.getContext('2d'),
+                    viewport: viewport
+                };
+
+                // Render the page contents in the canvas
+                page.render(renderContext).then(function () {
+                    __PAGE_RENDERING_IN_PROGRESS = 0;
+                    console.log("chargerCanvas Page #" + __CURRENT_PAGE + "It is done.");
+                    // fin
+                    resolve("SUCCESS");
+                });
+
+            }).catch(function (error) {
+                reject(error.message);
+            });
+        });
+    }; // FIn chargerPDFCanvas
+
+
+    var showPage = function(page_no) {
+        // Disable Prev & Next buttons while page is being loaded
+        $("#pdf-next, #pdf-prev").attr('disabled', 'disabled');
+
+        // While page is being rendered hide the canvas and show a loading message
+        $("#" + CANVAS_ID).hide();
+        $("#page-loader").show();
+        $("#download-pdf").hide();
+        // Update current page in HTML
+        $("#pdf-current-page").text(page_no);
+        CANVAS_DOM = document.getElementById(CANVAS_ID);
+        // show the canvas with the appropriate page
+        const remove = removeChild();
+        remove.then(function () {
+            const append = appendChild();
+            append.then(function () {
+                // Re-enable Prev & Next buttons
+                $("#pdf-next, #pdf-prev").removeAttr('disabled');
+                // Show the canvas and hide the page loader
+                $("#" + CANVAS_ID).show();
+                $("#page-loader").hide();
+                $("#download-pdf").show();
+            });
+        });
+
+        function removeChild() {
+            return new Promise(function(resolve, reject) {
+                CANVAS_HOLDER_DOM.removeChild(CANVAS_DOM, contenuPDF[page_no].canvas);
+                resolve();
+            });
+        }
+
+        function appendChild() {
+            return new Promise(function(resolve, reject) {
+                CANVAS_HOLDER_DOM.appendChild(contenuPDF[page_no].canvas);
+                resolve();
+            });
+        }
+    } // FIN showPage
+
+
+    this.savePDF = function() {
+        __CURRENT_PAGE = 1;
+        SAVE_PDF = new jsPDF("p", "mm", "a4");
+        // first page is already created, we populate it now then, we use recursive
+        $("#num-page").html(__CURRENT_PAGE);
+        var promise = savePagePDF();
+        promise.then(savePDFRecursive);
+    }; // FIN savePDF
+
+    var savePDFRecursive = function () {
+        if (++__CURRENT_PAGE <= __TOTAL_PAGES) {
+            SAVE_PDF.addPage('a4', '1');
+            setTimeout(function(){ 
+                const promise = savePagePDF();
+                promise.then(savePDFRecursive, showError);
+                $("#num-page").html(__CURRENT_PAGE);
+            }, 50);
+            
+        }
+        else if (__CURRENT_PAGE > __TOTAL_PAGES) {
+            // All PDF loaded
+            // Hide the pdf loader and show pdf container in HTML
+            self.PDFReadyState();
+            // sauvegarder le pdf
+            var nomFichier = document.getElementById("nom-fichier").value + '.pdf';
+            SAVE_PDF.save(nomFichier);
+            __CURRENT_PAGE = 1;
+            showPage(__CURRENT_PAGE);
+        }
+    };
+
+    var savePagePDF = function() {
+        return new Promise(function(resolve, reject) {
+            var img = contenuPDF[__CURRENT_PAGE].canvas.toDataURL("image/png", 1.0);
+            SAVE_PDF.addImage(img, 'JPEG', 0, 0);
+            resolve();
+        });
+    };
+
+
+
+    var clearPage = function() {
+        if (confirm('Effacer les modifications sur cette page. Continuer ?')) {
+            var promise = self.chargerPDFCanvas();
+            promise.then(showPage(__CURRENT_PAGE));
+            $('#mandataire-hover').show();
+        }
+    };
+
+    var minX, maxY, maxX;
+    var initHoverMandaraire = function() {
+        var inPos = $('#signature-pad').position();
+        var inTop = inPos.top + $('#signature-pad').height() - 80;
+        var inLeft = inPos.left + 40;
+        minX = inPos.left;
+        maxY = inPos.top + $('#signature-pad').height() - $('#mandataire-hover').height();
+        maxX = document.getElementById("signature-pad").getBoundingClientRect().width - ($('#mandataire-hover').width() / 2);
+        $('#mandataire-hover').css({ top: inTop, left: inLeft, position: 'absolute' }).show().draggable();
+        document.getElementById("numberX").setAttribute("value", Math.round(inLeft));
+        document.getElementById("numberY").setAttribute("value", Math.round(inTop));
+    };
+
+    var updateHoverMandataire = function() {
+        var inTop = document.getElementById("numberY").value;
+        var inLeft = document.getElementById("numberX").value;
+
+        if (inLeft < maxX && inLeft > minX)
+            $('#mandataire-hover').css({ left: Number(inLeft) });
+
+        if (inTop > 0 && inTop < maxY)
+            $('#mandataire-hover').css({ top: Number(inTop) });
+
+    };
+
+    var setFont = function(ctx) {
+        ctx.font = "24px Arial";
+        ctx.fillStyle = "black";
+    };
+
+    var applyMandataire = function(ctx) {
+        setFont(ctx);
+        var Mandataire = document.getElementById("nom-mandataire").value;
+        var abs = Math.abs(document.getElementById("signature-pad").getBoundingClientRect().x - document.getElementById("mandataire-hover").getBoundingClientRect().x);
+        ctx.fillText(Mandataire, abs, $('#mandataire-hover').position().top + 25);
+        $('#mandataire-hover').hide();
+    };
+
+    var showError = function(error) {
+        alert(error.message);
+        $('#reload-page').show();
+    };
+
+    this.initialState = function() {
+        $("#nom-mandataire").blur();
+        $("#numberX").blur();
+        $("#numberY").blur();
+        $("#nom-fichier").blur();
+        $(".load-controls").show();
+        $('#reload-page').hide();
+        $('#pdf-loader').hide();
+        $('.pdf-meta').hide();
+        $('.pdf-content').hide();
+        $('.pdf-save').hide();
+        $('body').show();
+    };
+
+    this.PDFLoadingState = function() {
+        $('.load-controls').hide();
+        $('#pdf-loader').show();
+        $("#page-loader").show();
+    };
+
+    this.PDFReadyState = function() {
+        $('body').show();
+        $('.load-controls').show();
+        $('#upload-button').hide();
+        $('#reload-page').show();
+        $('#pdf-loader').hide();
+        $('.pdf-meta').show();
+        $('.pdf-content').show();
+        $('.pdf-save').show();
+        $("#pdf-total-pages").text(__TOTAL_PAGES);
+        initHoverMandaraire();
+    };
+
+    this.ResetState = function() {
+        $('.load-controls').show();
+        $('#upload-button').hide();
+        $('#reload-page').show();
+        $('#pdf-loader').hide();
+        $('.pdf-meta').show();
+        $('.pdf-content').show();
+        $('.pdf-save').show();
+    };
+
+
+    // Upon click this should should trigger click on the #file-to-upload file input element
+    $("#upload-button").on('click', function () {
+        $("#file-to-upload").trigger('click');
+    });
+
+    // When user chooses a PDF file
+    $("#file-to-upload").on('change', function () {
+        
+        const files = event.target.files;
+        if (files && files.length > 0) {
+            const targetFile = files[0];
+            self.traiterFichier(targetFile);
+        }
+    });
+
+	this.traiterFichier = function(p_ficher) {
+		var objectURL;
+		try {
+			objectURL = window.URL.createObjectURL(p_ficher);
+			self.initPDF(objectURL);
+			console.log(objectURL);
+			// window.URL.revokeObjectURL(objectURL);
+		}
+		catch (e) {
+			try {
+				// Fallback if createObjectURL is not supported
+				const fileReader = new FileReader();
+				self.PDFLoadingState();
+				fileReader.onloadend = function (evt) {
+					console.log(fileReader.result);
+					self.initPDF(fileReader.result);
+					//console.log(evt.target.result);
+					//initPDF(evt.target.result);
+					self.PDFReadyState();
+				};
+				fileReader.readAsDataURL(p_ficher);
+			}
+			catch (e) {
+				console.log('File Upload not supported:');
+			}
+		}
+	};
+	
+	this.setBlob = function(p_blob) {
+		var blob = new Blob([p_blob], {type: 'application/pdf'}); // pass a useful mime type here
+		var url = URL.createObjectURL(blob);
+		// url will be something like: blob:d3958f5c-0777-0845-9dcf-2cb28783acaf
+		// now you can use the url in any context that regular URLs can be used in, for example img.src, etc.
+		eatPDF.initPDF({url : url});
+	};
+
+
+        // Previous page of the PDF
+        $("#pdf-prev").on('click', function () {
+            if (__CURRENT_PAGE != 1)
+                showPage(--__CURRENT_PAGE);
+        });
+
+        // Next page of the PDF
+        $("#pdf-next").on('click', function () {
+            if (__CURRENT_PAGE != __TOTAL_PAGES)
+                showPage(++__CURRENT_PAGE);
+        });
+
+        // Download button
+        $("#download-pdf").on('click', function () {
+            self.initialState();
+            self.PDFLoadingState();
+            setTimeout(function () {
+                self.savePDF();
+            }, 200);
+        });
+
+        // appliquer mandaaire button
+        $("#apply-mandataire").on('click', function () {
+            applyMandataire(contenuPDF[__CURRENT_PAGE].canvas.getContext('2d'));
+        });
+
+        // Clear modifs
+        $("#clear-page").on('click', function () {
+            initHoverMandaraire();
+            clearPage();
+        });
+
+        $("#nom-mandataire").on('keyup', function () {
+            var v = document.getElementById("nom-mandataire").value;
+            $("#Mandataire-text").html(v);
+            //$(this).width(v*10);
+        });
+
+        // Reload button
+        $("#reload-page").on('click', function () {
+            if (confirm('Relancer la page et effacer tout. Continuer ?')) {
+                location.reload();
+            }
+
+        });
+
+        $("#nom-mandataire").on('focus', function () {
+            $('#mandataire-hover').show();
+        });
+
+        $("#numberX").on('change', function () {
+            updateHoverMandataire();
+
+            if ($(this).val() > maxX)
+                $(this).val(Math.round(maxX));
+
+            if ($(this).val() < minX)
+                $(this).val(Math.round(minX));
+        });
+
+        $("#numberY").on('change', function () {
+            updateHoverMandataire();
+
+            if ($(this).val() > maxY)
+                $(this).val(Math.round(maxY));
+
+            if ($(this).val() < 0)
+                $(this).val(0);
+        });
+}
+
+	function getUrlVars() {
+		var vars = {};
+		var parts = window.location.href.replace(/[?&]+([^=&]+)=([^&]*)/gi,    
+		function(m,key,value) {
+		  vars[key] = value;
+		});
+		return vars;
+	}
+	
+	function setBlb(p_blb) {
+		eatPDF.setBlob(p_blb);
+	}
+	
+	
+	window.onload = function () {
+		eatPDF = new PDFEater();
+		eatPDF.initialState();
+		if (getUrlVars()['pdf']) {
+		
+			$(function() {
+			  $.ajax({
+				type: 'GET',
+				url: 'AJAX/js/JSON_TEST.json', // js is lowercase!
+				dataType: 'pdf',
+				success: function(data) {
+				  console.log('success',data);
+				}
+			  });
+			});
+		
+			var xhttp = new XMLHttpRequest();
+			xhttp.onreadystatechange = function() {
+				if (this.readyState == 4 && this.status == 200) {
+				  eatPDF.initPDF({url : getUrlVars()['pdf']});
+				}
+			};
+			xhttp.open("GET", getUrlVars()['pdf'], true);
+			xhttp.send();	
+		}
+	};
+    </script>
+    <script src="http://code.jquery.com/jquery-1.7.2.min.js"></script>
+    <script src="http://code.jquery.com/ui/1.8.21/jquery-ui.min.js"></script>
+    <script src="scripts/jquery.ui.touch-punch.min.js"></script>
+</body>
+</html>
